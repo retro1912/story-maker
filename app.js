@@ -15,6 +15,15 @@ const loadFont=(f,t)=>document.fonts.load(`700 40px "${FAM[f]}"`,t).catch(()=>{}
 function fit(){const b=$('#stage'),s=Math.min((b.clientWidth-16)/W,(b.clientHeight-16)/H);
   cv.setDimensions({width:W*s+'px',height:H*s+'px'},{cssOnly:true});cv.calcOffset()}
 
+/* ダイアログ */
+function ask({title,msg='',input=null,ok='OK'}){return new Promise(res=>{
+  const d=$('#dlg'),i=$('#di'),y=$('#do'),n=$('#dc'),multi=input!=null;
+  $('#dt').textContent=title;$('#dm').textContent=msg;$('#dm').hidden=!msg;i.hidden=!multi;i.value=input??'';y.textContent=ok;d.hidden=false;
+  (multi?i:y).focus();if(multi)i.select();
+  const done=v=>{d.hidden=true;y.onclick=n.onclick=d.onclick=d.onkeydown=null;res(v)};
+  y.onclick=()=>done(multi?i.value:true);n.onclick=()=>done(multi?null:false);
+  d.onclick=e=>{if(e.target===d)n.click()};d.onkeydown=e=>{if(e.key==='Escape')n.click()}})}
+
 /* 写真 */
 function setPhoto(url){const im=new Image();im.onerror=()=>toast('写真を読み込めませんでした');
 im.onload=()=>{const k=Math.min(1,2200/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement('canvas');
@@ -42,11 +51,22 @@ function addStamp(src,o={}){return new Promise(res=>fabric.Image.fromURL(encodeU
   const s=(o.w||360)/img.width;
   img.set({left:o.x??W/2,top:o.y??H/2,originX:'center',originY:'center',scaleX:s,scaleY:s,angle:o.angle||0});
   cv.add(img);if(o.x==null)cv.setActiveObject(img);cv.requestRenderAll();res()}))}
+const ts={stroke:null,sw:10,bg:null};
+function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+function paintBg(c){if(!this.bgColor)return;const f=this.fontSize,px=f*.3+this.strokeWidth/2,py=f*.14+this.strokeWidth/2,w=this.width+px*2,h=this.height+py*2;
+  c.fillStyle=this.bgColor;rr(c,-w/2,-h/2,w,h,f*.22);c.fill()}
+const setOutline=(t,col,w)=>t.set({stroke:col||null,strokeWidth:col?w:0});
 async function addText(text,font='sans',o={}){
   await loadFont(font,text);
+  const mine=o.x==null,st=mine?ts:{stroke:o.stroke,sw:o.strokeWidth||10,bg:o.bg};
   const t=new fabric.Text(text,{fontFamily:FAM[font],fontWeight:700,fontSize:o.fontSize||96,fill:o.fill||color,
-    left:o.x??W/2,top:o.y??H/2,originX:'center',originY:'center',textAlign:o.align||'center',lineHeight:1.2,angle:o.angle||0});
-  cv.add(t);if(o.x==null)cv.setActiveObject(t);cv.requestRenderAll()}
+    left:o.x??W/2,top:o.y??H/2,originX:'center',originY:'center',textAlign:o.align||'center',lineHeight:1.2,angle:o.angle||0,
+    paintFirst:'stroke',strokeLineJoin:'round',objectCaching:false});
+  setOutline(t,st.stroke,st.sw);t.bgColor=st.bg||null;t._renderBackground=paintBg;
+  cv.add(t);if(mine)cv.setActiveObject(t);cv.requestRenderAll()}
+const selText=()=>{const a=cv.getActiveObject();return a&&a.type==='text'?a:null};
+function syncSel(){const a=selText();if(!a)return;color=a.fill;ts.stroke=a.strokeWidth?a.stroke:null;if(a.strokeWidth)ts.sw=a.strokeWidth;ts.bg=a.bgColor||null;if(mode==='text')draw()}
+cv.on('selection:created',syncSel);cv.on('selection:updated',syncSel);
 const addObj=o=>o.type==='stamp'?addStamp(o.src,o):o.type==='text'?addText(o.text,o.font,o):0;
 
 $('#del').onclick=()=>{const a=cv.getActiveObjects();if(!a.length)return toast('削除するものを選んでください');
@@ -63,7 +83,7 @@ async function applyTemplate(t){
 function preview(t){const f=t.photo||{x:0,y:0,w:W,h:H};
   const o=(t.objects||[]).map(o=>o.type==='stamp'
     ?`<image href="${encodeURI(o.src)}" x="${o.x-o.w/2}" y="${o.y-o.w/2}" width="${o.w}" height="${o.w}"/>`
-    :`<text x="${o.x}" y="${o.y}" font-size="${o.fontSize||96}" fill="${o.fill||'#5D321A'}" font-weight="700" text-anchor="middle" dominant-baseline="middle">${esc(String(o.text).split('\n')[0])}</text>`).join('');
+    :`<text x="${o.x}" y="${o.y}" font-size="${o.fontSize||96}" fill="${o.fill||'#5D321A'}" font-weight="700" text-anchor="middle" dominant-baseline="middle"${o.stroke?` stroke="${o.stroke}" stroke-width="${o.strokeWidth||10}" paint-order="stroke" stroke-linejoin="round"`:''}>${esc(String(o.text).split('\n')[0])}</text>`).join('');
   return`<svg viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="${t.background||'#FEF4E8'}"/><rect x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" fill="#4EA9A6" opacity=".35"/>${o}</svg>`}
 
 /* パネル */
@@ -80,22 +100,30 @@ function draw(){
     const b=el('button','item');
     if(mode==='stamp'){const im=el('img');im.src=encodeURI(it);im.alt='スタンプ';im.loading='lazy';im.onerror=()=>b.remove();b.append(im);b.onclick=()=>addStamp(it)}
     else{b.innerHTML=preview(it)+`<span>${esc(it.name||'')}</span>`;
-      b.onclick=()=>{if(cv.getObjects().some(o=>o!==photoObj&&o!==placeholder)&&!confirm('現在の編集内容は消えます。テンプレートを適用しますか？'))return;applyTemplate(it)}}
+      b.onclick=async()=>{if(cv.getObjects().some(o=>o!==photoObj&&o!==placeholder)&&!await ask({title:'テンプレートを適用',msg:'現在の編集内容は消えます。よろしいですか？',ok:'適用する'}))return;applyTemplate(it)}}
     g.append(b)});
   box.append(g)}
+function swRow(cur,pick,none){const r=el('div','row'),lc=String(cur).toLowerCase();
+  if(none){const b=el('button','tab'+(cur==null?' on':''),'なし');b.onclick=()=>pick(null);r.append(b)}
+  COLORS.forEach(c=>{const b=el('button','sw'+(c.toLowerCase()===lc?' on':''));b.style.background=c;b.setAttribute('aria-label',c);b.onclick=()=>pick(c);r.append(b)});
+  return r}
 function textPanel(box){
   const row=el('div','row');
   [['sans','ゴシックを追加'],['serif','明朝を追加']].forEach(([f,l])=>{const b=el('button','',l);
-    b.onclick=()=>{const v=prompt('追加する文字を入力（改行は入力欄で改行）','');if(v)addText(v,f)};row.append(b)});
+    b.onclick=async()=>{const v=await ask({title:l.replace('を追加',''),msg:'表示する文字を入力してください（改行もできます）',input:'',ok:'追加'});if(v&&v.trim())addText(v,f)};row.append(b)});
   const e=el('button','sub','選択中の文字を編集');
-  e.onclick=()=>{const a=cv.getActiveObject();if(!a||a.type!=='text')return toast('先に文字をタップして選んでください');
-    const v=prompt('文字を編集',a.text);if(v==null)return;
-    loadFont(a.fontFamily===FAM.serif?'serif':'sans',v).then(()=>{a.set('text',v);cv.requestRenderAll()})};
-  row.append(e);box.append(row,el('p','','文字の色'));
-  const sw=el('div','row');
-  COLORS.forEach(c=>{const b=el('button','sw'+(c===color?' on':''));b.style.background=c;b.setAttribute('aria-label',c);
-    b.onclick=()=>{color=c;const a=cv.getActiveObject();if(a&&a.type==='text'){a.set('fill',c);cv.requestRenderAll()}draw()};sw.append(b)});
-  box.append(sw)}
+  e.onclick=async()=>{const a=selText();if(!a)return toast('先に文字をタップして選んでください');
+    const v=await ask({title:'文字を編集',input:a.text,ok:'変更する'});if(v==null||!v.trim())return;
+    await loadFont(a.fontFamily===FAM.serif?'serif':'sans',v);a.set('text',v);cv.requestRenderAll()};
+  row.append(e);
+  const rg=el('input');rg.type='range';rg.min=2;rg.max=30;rg.value=ts.sw;rg.setAttribute('aria-label','縁取りの太さ');
+  rg.oninput=()=>{ts.sw=+rg.value;const a=selText();if(a&&a.stroke){a.set('strokeWidth',ts.sw);cv.requestRenderAll()}};
+  box.append(row,el('p','h','文字の色'),
+    swRow(color,c=>{color=c;const a=selText();if(a){a.set('fill',c);cv.requestRenderAll()}draw()}),
+    el('p','h','縁取り（色・太さ）'),
+    swRow(ts.stroke,c=>{ts.stroke=c;const a=selText();if(a){setOutline(a,c,ts.sw);cv.requestRenderAll()}draw()},1),rg,
+    el('p','h','背景'),
+    swRow(ts.bg,c=>{ts.bg=c;const a=selText();if(a){a.bgColor=c;cv.requestRenderAll()}draw()},1))}
 document.querySelectorAll('.mode').forEach(b=>b.onclick=()=>{mode=b.dataset.m;draw()});
 
 /* 書き出し */
@@ -147,7 +175,7 @@ async function loadData(){
 
 /* 初期化 */
 $('#reset').onclick=async()=>{
-  if(!confirm('編集内容をすべて消して最初の状態に戻します（スタンプ一覧も再読み込みします）。よろしいですか？'))return;
+  if(!await ask({title:'初期化',msg:'編集内容をすべて消して、最初の状態に戻します。スタンプ一覧も再読み込みします。',ok:'初期化する'}))return;
   try{localStorage.removeItem('tree')}catch{}
   if(photoURL){URL.revokeObjectURL(photoURL);photoURL=null}
   await loadData();mode='template';draw();await applyTemplate(BLANK);toast('初期化しました')};
