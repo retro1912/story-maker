@@ -78,7 +78,7 @@ function draw(){
   const g=el('div','grid');
   cats[i].items.forEach(it=>{
     const b=el('button','item');
-    if(mode==='stamp'){const im=el('img');im.src=encodeURI(it);im.alt='スタンプ';im.loading='lazy';b.append(im);b.onclick=()=>addStamp(it)}
+    if(mode==='stamp'){const im=el('img');im.src=encodeURI(it);im.alt='スタンプ';im.loading='lazy';im.onerror=()=>b.remove();b.append(im);b.onclick=()=>addStamp(it)}
     else{b.innerHTML=preview(it)+`<span>${esc(it.name||'')}</span>`;
       b.onclick=()=>{if(cv.getObjects().some(o=>o!==photoObj&&o!==placeholder)&&!confirm('現在の編集内容は消えます。テンプレートを適用しますか？'))return;applyTemplate(it)}}
     g.append(b)});
@@ -112,9 +112,45 @@ $('#share').onclick=async()=>{const b=await render(),f=new File([b],'story.png',
     try{await navigator.share({files:[f]});return}catch(e){if(e.name==='AbortError')return}}
   download(b)};
 
-/* 起動 */
-(async()=>{
-  try{DATA=await (await fetch('manifest.json',{cache:'no-cache'})).json()}catch{toast('manifest.json が読み込めません')}
+/* 一覧の取得：GitHubのフォルダ内容を直接読む（失敗時は manifest.json） */
+const IMG=['.png','.svg','.webp','.jpg','.jpeg','.gif'],clean=n=>n.replace(/^\d+[_\-.\s]*/,'');
+function group(paths,exts,root){
+  const m=new Map(),loose=[];
+  paths.filter(p=>p.startsWith(root+'/')&&exts.some(e=>p.toLowerCase().endsWith(e)))
+    .sort((a,b)=>a.localeCompare(b,'ja',{numeric:true}))
+    .forEach(p=>{const q=p.split('/');if(q.length===2)loose.push(p);else{if(!m.has(q[1]))m.set(q[1],[]);m.get(q[1]).push(p)}});
+  const cats=[...m].map(([k,items])=>({category:clean(k),items}));
+  if(loose.length)cats.push({category:'その他',items:loose});
+  return cats}
+async function discover(){
+  const h=location.hostname.match(/^(.+)\.github\.io$/),repo=location.pathname.split('/')[1];
+  if(!h||!repo)throw 0;
+  let paths;
+  try{const c=JSON.parse(localStorage.getItem('tree')||'null');if(c&&Date.now()-c.t<18e4)paths=c.p}catch{}
+  if(!paths){
+    for(const br of ['HEAD','main','master']){
+      const r=await fetch(`https://api.github.com/repos/${h[1]}/${repo}/git/trees/${br}?recursive=1`);
+      if(r.ok){paths=(await r.json()).tree.filter(x=>x.type==='blob').map(x=>x.path);break}}
+    if(!paths)throw 0;
+    try{localStorage.setItem('tree',JSON.stringify({t:Date.now(),p:paths}))}catch{}}
+  const stamps=group(paths,IMG,'stamps');
+  const templates=await Promise.all(group(paths,['.json'],'templates').map(async c=>({category:c.category,
+    items:(await Promise.all(c.items.map(async f=>{try{
+      return{name:f.split('/').pop().replace(/\.json$/i,''),...await (await fetch(encodeURI(f),{cache:'no-cache'})).json()}}catch{return null}}))).filter(Boolean)})));
+  return{stamps,templates}}
+async function loadData(){
+  let d;try{d=await discover()}catch{}
+  if(!d){try{d=await (await fetch('manifest.json',{cache:'no-cache'})).json()}catch{toast('スタンプ・テンプレートの一覧を読み込めません')}}
+  DATA=d||{stamps:[],templates:[]};
   DATA.templates=[{category:'基本',items:[BLANK]},...DATA.templates.filter(c=>c.items.length)];
-  new ResizeObserver(fit).observe($('#stage'));
-  draw();await applyTemplate(BLANK);fit()})();
+  cat={template:0,stamp:0}}
+
+/* 初期化 */
+$('#reset').onclick=async()=>{
+  if(!confirm('編集内容をすべて消して最初の状態に戻します（スタンプ一覧も再読み込みします）。よろしいですか？'))return;
+  try{localStorage.removeItem('tree')}catch{}
+  if(photoURL){URL.revokeObjectURL(photoURL);photoURL=null}
+  await loadData();mode='template';draw();await applyTemplate(BLANK);toast('初期化しました')};
+
+/* 起動 */
+(async()=>{await loadData();new ResizeObserver(fit).observe($('#stage'));draw();await applyTemplate(BLANK);fit()})();
