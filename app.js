@@ -2,8 +2,8 @@ const W=1080,H=1920,$=s=>document.querySelector(s);
 const FAM={sans:'Noto Sans JP',serif:'Noto Serif JP'};
 const COLORS=['#5D321A','#FEF4E8','#4EA9A6','#BFA00D','#ffffff','#000000'];
 const BLANK={name:'白紙（全面写真）',background:'#FEF4E8',objects:[]};
-let DATA={stamps:[],templates:[]},mode='template',cat={template:0,stamp:0},color=COLORS[0];
-let frame={x:0,y:0,w:W,h:H},photoObj=null,placeholder=null,photoURL=null;
+let DATA={stamps:[],templates:[]},mode='stamp',cat={template:0,stamp:0},color=COLORS[0];
+let frame={x:0,y:0,w:W,h:H},photoObj=null,placeholder=null,frameObj=null,photoURL=null;
 
 fabric.Object.prototype.set({cornerSize:64,touchCornerSize:90,transparentCorners:false,cornerColor:'#4EA9A6',cornerStyle:'circle',borderColor:'#4EA9A6',borderScaleFactor:4,padding:8});
 const cv=new fabric.Canvas('c',{width:W,height:H,preserveObjectStacking:true,enableRetinaScaling:false,backgroundColor:'#FEF4E8'});
@@ -51,21 +51,18 @@ function addStamp(src,o={}){return new Promise(res=>fabric.Image.fromURL(encodeU
   const s=(o.w||360)/img.width;
   img.set({left:o.x??W/2,top:o.y??H/2,originX:'center',originY:'center',scaleX:s,scaleY:s,angle:o.angle||0});
   cv.add(img);if(o.x==null)cv.setActiveObject(img);cv.requestRenderAll();res()}))}
-const ts={stroke:null,sw:10,bg:null};
-function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
-function paintBg(c){if(!this.bgColor)return;const f=this.fontSize,px=f*.3+this.strokeWidth/2,py=f*.14+this.strokeWidth/2,w=this.width+px*2,h=this.height+py*2;
-  c.fillStyle=this.bgColor;rr(c,-w/2,-h/2,w,h,f*.22);c.fill()}
+const ts={stroke:null,sw:10};
 const setOutline=(t,col,w)=>t.set({stroke:col||null,strokeWidth:col?w:0});
 async function addText(text,font='sans',o={}){
   await loadFont(font,text);
-  const mine=o.x==null,st=mine?ts:{stroke:o.stroke,sw:o.strokeWidth||10,bg:o.bg};
+  const mine=o.x==null,st=mine?ts:{stroke:o.stroke,sw:o.strokeWidth||10};
   const t=new fabric.Text(text,{fontFamily:FAM[font],fontWeight:700,fontSize:o.fontSize||96,fill:o.fill||color,
     left:o.x??W/2,top:o.y??H/2,originX:'center',originY:'center',textAlign:o.align||'center',lineHeight:1.2,angle:o.angle||0,
-    paintFirst:'stroke',strokeLineJoin:'round',objectCaching:false});
-  setOutline(t,st.stroke,st.sw);t.bgColor=st.bg||null;t._renderBackground=paintBg;
+    paintFirst:'stroke',strokeLineJoin:'round'});
+  setOutline(t,st.stroke,st.sw);
   cv.add(t);if(mine)cv.setActiveObject(t);cv.requestRenderAll()}
 const selText=()=>{const a=cv.getActiveObject();return a&&a.type==='text'?a:null};
-function syncSel(){const a=selText();if(!a)return;color=a.fill;ts.stroke=a.strokeWidth?a.stroke:null;if(a.strokeWidth)ts.sw=a.strokeWidth;ts.bg=a.bgColor||null;if(mode==='text')draw()}
+function syncSel(){const a=selText();if(!a)return;color=a.fill;ts.stroke=a.strokeWidth?a.stroke:null;if(a.strokeWidth)ts.sw=a.strokeWidth;if(mode==='text')draw()}
 cv.on('selection:created',syncSel);cv.on('selection:updated',syncSel);
 const addObj=o=>o.type==='stamp'?addStamp(o.src,o):o.type==='text'?addText(o.text,o.font,o):0;
 
@@ -74,9 +71,28 @@ $('#del').onclick=()=>{const a=cv.getActiveObjects();if(!a.length)return toast('
   a.forEach(o=>{cv.remove(o);if(o===photoObj){photoObj=null;photoURL=null;showPlaceholder()}});cv.requestRenderAll()};
 
 /* テンプレート */
+const loadImg=src=>new Promise((ok,ng)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=ng;i.src=encodeURI(src)});
+function holeBox(im){ // フレーム画像の最も大きい透明部分を探し、外接四角を返す
+  const w=270,h=480,c=document.createElement('canvas');c.width=w;c.height=h;
+  const x=c.getContext('2d');x.drawImage(im,0,0,w,h);
+  const d=x.getImageData(0,0,w,h).data,seen=new Uint8Array(w*h);let best=null;
+  for(let s=0;s<w*h;s++){if(seen[s]||d[s*4+3]>=128)continue;
+    const st=[s];seen[s]=1;let n=0,x0=w,y0=h,x1=0,y1=0;
+    const go=q=>{if(!seen[q]&&d[q*4+3]<128){seen[q]=1;st.push(q)}};
+    while(st.length){const p=st.pop(),px=p%w,py=(p/w)|0;n++;
+      if(px<x0)x0=px;if(px>x1)x1=px;if(py<y0)y0=py;if(py>y1)y1=py;
+      if(px>0)go(p-1);if(px<w-1)go(p+1);if(py>0)go(p-w);if(py<h-1)go(p+w)}
+    if(!best||n>best.n)best={n,x0,y0,x1,y1}}
+  if(!best)return null;
+  const k=W/w,m=6,X=Math.max(0,best.x0*k-m),Y=Math.max(0,best.y0*k-m);
+  return{x:X,y:Y,w:Math.min(W,(best.x1+1)*k+m)-X,h:Math.min(H,(best.y1+1)*k+m)-Y}}
 async function applyTemplate(t){
   cv.clear();cv.backgroundColor=t.background||'#FEF4E8';
-  photoObj=placeholder=null;frame=t.photo||{x:0,y:0,w:W,h:H};
+  photoObj=placeholder=frameObj=null;frame=t.photo||{x:0,y:0,w:W,h:H};
+  if(t.frame){try{const im=await loadImg(t.frame);
+      if(!t.photo){const b=holeBox(im);if(b)frame=b;else toast('フレーム画像に透明な部分（写真が入る穴）がありません')}
+      frameObj=new fabric.Image(im,{left:0,top:0,scaleX:W/im.width,scaleY:H/im.height,selectable:false,evented:false});cv.add(frameObj)}
+    catch{toast('フレーム画像を読み込めませんでした')}}
   showPlaceholder();if(photoURL)setPhoto(photoURL);
   for(const o of t.objects||[])await addObj(o);
   cv.discardActiveObject();cv.requestRenderAll()}
@@ -84,7 +100,7 @@ function preview(t){const f=t.photo||{x:0,y:0,w:W,h:H};
   const o=(t.objects||[]).map(o=>o.type==='stamp'
     ?`<image href="${encodeURI(o.src)}" x="${o.x-o.w/2}" y="${o.y-o.w/2}" width="${o.w}" height="${o.w}"/>`
     :`<text x="${o.x}" y="${o.y}" font-size="${o.fontSize||96}" fill="${o.fill||'#5D321A'}" font-weight="700" text-anchor="middle" dominant-baseline="middle"${o.stroke?` stroke="${o.stroke}" stroke-width="${o.strokeWidth||10}" paint-order="stroke" stroke-linejoin="round"`:''}>${esc(String(o.text).split('\n')[0])}</text>`).join('');
-  return`<svg viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="${t.background||'#FEF4E8'}"/><rect x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" fill="#4EA9A6" opacity=".35"/>${o}</svg>`}
+  return`<svg viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="${t.background||'#FEF4E8'}"/>${t.frame?`<image href="${encodeURI(t.frame)}" width="${W}" height="${H}" preserveAspectRatio="none"/>`:`<rect x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" fill="#4EA9A6" opacity=".35"/>`}${o}</svg>`}
 
 /* パネル */
 function draw(){
@@ -100,7 +116,7 @@ function draw(){
     const b=el('button','item');
     if(mode==='stamp'){const im=el('img');im.src=encodeURI(it);im.alt='スタンプ';im.loading='lazy';im.onerror=()=>b.remove();b.append(im);b.onclick=()=>addStamp(it)}
     else{b.innerHTML=preview(it)+`<span>${esc(it.name||'')}</span>`;
-      b.onclick=async()=>{if(cv.getObjects().some(o=>o!==photoObj&&o!==placeholder)&&!await ask({title:'テンプレートを適用',msg:'現在の編集内容は消えます。よろしいですか？',ok:'適用する'}))return;applyTemplate(it)}}
+      b.onclick=async()=>{if(cv.getObjects().some(o=>o!==photoObj&&o!==placeholder&&o!==frameObj)&&!await ask({title:'テンプレートを適用',msg:'現在の編集内容は消えます。よろしいですか？',ok:'適用する'}))return;applyTemplate(it)}}
     g.append(b)});
   box.append(g)}
 function swRow(cur,pick,none){const r=el('div','row'),lc=String(cur).toLowerCase();
@@ -121,9 +137,7 @@ function textPanel(box){
   box.append(row,el('p','h','文字の色'),
     swRow(color,c=>{color=c;const a=selText();if(a){a.set('fill',c);cv.requestRenderAll()}draw()}),
     el('p','h','縁取り（色・太さ）'),
-    swRow(ts.stroke,c=>{ts.stroke=c;const a=selText();if(a){setOutline(a,c,ts.sw);cv.requestRenderAll()}draw()},1),rg,
-    el('p','h','背景'),
-    swRow(ts.bg,c=>{ts.bg=c;const a=selText();if(a){a.bgColor=c;cv.requestRenderAll()}draw()},1))}
+    swRow(ts.stroke,c=>{ts.stroke=c;const a=selText();if(a){setOutline(a,c,ts.sw);cv.requestRenderAll()}draw()},1),rg)}
 document.querySelectorAll('.mode').forEach(b=>b.onclick=()=>{mode=b.dataset.m;draw()});
 
 /* 書き出し */
@@ -150,6 +164,13 @@ function group(paths,exts,root){
   const cats=[...m].map(([k,items])=>({category:clean(k),items}));
   if(loose.length)cats.push({category:'その他',items:loose});
   return cats}
+async function tplItems(files){ // 同じ名前の .json と画像を1つのテンプレートにまとめる
+  const by=new Map(),out=[];
+  files.forEach(f=>{const b=f.replace(/\.[^./]+$/,'');if(!by.has(b))by.set(b,{});by.get(b)[/\.json$/i.test(f)?'j':'i']=f});
+  for(const [b,v] of by){let t={};
+    if(v.j){try{t=await (await fetch(encodeURI(v.j),{cache:'no-cache'})).json()}catch{if(!v.i)continue}}
+    out.push({name:b.split('/').pop(),...t,frame:t.frame||v.i})}
+  return out}
 async function discover(){
   const h=location.hostname.match(/^(.+)\.github\.io$/),repo=location.pathname.split('/')[1];
   if(!h||!repo)throw 0;
@@ -162,9 +183,7 @@ async function discover(){
     if(!paths)throw 0;
     try{localStorage.setItem('tree',JSON.stringify({t:Date.now(),p:paths}))}catch{}}
   const stamps=group(paths,IMG,'stamps');
-  const templates=await Promise.all(group(paths,['.json'],'templates').map(async c=>({category:c.category,
-    items:(await Promise.all(c.items.map(async f=>{try{
-      return{name:f.split('/').pop().replace(/\.json$/i,''),...await (await fetch(encodeURI(f),{cache:'no-cache'})).json()}}catch{return null}}))).filter(Boolean)})));
+  const templates=await Promise.all(group(paths,['.json',...IMG],'templates').map(async c=>({category:c.category,items:await tplItems(c.items)})));
   return{stamps,templates}}
 async function loadData(){
   let d;try{d=await discover()}catch{}
@@ -178,7 +197,7 @@ $('#reset').onclick=async()=>{
   if(!await ask({title:'初期化',msg:'編集内容をすべて消して、最初の状態に戻します。スタンプ一覧も再読み込みします。',ok:'初期化する'}))return;
   try{localStorage.removeItem('tree')}catch{}
   if(photoURL){URL.revokeObjectURL(photoURL);photoURL=null}
-  await loadData();mode='template';draw();await applyTemplate(BLANK);toast('初期化しました')};
+  await loadData();mode='stamp';draw();await applyTemplate(BLANK);toast('初期化しました')};
 
 /* 起動 */
 (async()=>{await loadData();new ResizeObserver(fit).observe($('#stage'));draw();await applyTemplate(BLANK);fit()})();
