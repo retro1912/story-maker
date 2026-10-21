@@ -70,6 +70,11 @@ $('#del').onclick=()=>{const a=cv.getActiveObjects();if(!a.length)return toast('
   cv.discardActiveObject();
   a.forEach(o=>{cv.remove(o);if(o===photoObj){photoObj=null;photoURL=null;showPlaceholder()}});cv.requestRenderAll()};
 
+/* 中央に配置 */
+function center(fn){const a=cv.getActiveObject();if(!a||a===photoObj)return toast('中央に置く文字かスタンプを選んでください');
+  cv[fn](a);a.setCoords();cv.requestRenderAll()}
+$('#cx').onclick=()=>center('centerObjectH');$('#cy').onclick=()=>center('centerObjectV');
+
 /* テンプレート */
 const loadImg=src=>new Promise((ok,ng)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=ng;i.src=encodeURI(src)});
 function holeBox(im){ // フレーム画像の最も大きい透明部分を探し、外接四角を返す

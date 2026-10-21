@@ -43,3 +43,4 @@ input[type=range]{width:100%;accent-color:var(--main);margin:0 0 4px}
 #dlg textarea{width:100%;min-height:90px;border:2px solid var(--line);border-radius:10px;padding:10px;font:inherit;font-size:16px;color:var(--text);background:#fff;resize:vertical}
 #dlg textarea:focus{outline:3px solid var(--accent);border-color:var(--accent)}
 .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+#bar2{display:flex;gap:6px;padding:0 8px}#bar2 button{min-height:34px;font-size:13px}
