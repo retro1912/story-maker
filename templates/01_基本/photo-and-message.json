@@ -3,8 +3,8 @@
   "background": "#FEF4E8",
   "photo": {"x": 90, "y": 200, "w": 900, "h": 1100},
   "objects": [
-    {"type": "text", "text": "今日のひとこと", "x": 540, "y": 1450, "font": "serif", "fontSize": 96, "fill": "#5D321A"},
-    {"type": "stamp", "src": "stamps/03_デコ/heart.svg", "x": 900, "y": 230, "w": 220, "angle": 15},
-    {"type": "stamp", "src": "stamps/01_ドリンク/coffee.svg", "x": 200, "y": 1680, "w": 260}
+    {"type": "text", "text": "本日のケーキ", "x": 540, "y": 1450, "font": "serif", "fontSize": 96, "fill": "#5D321A"},
+    {"type": "stamp", "src": "stamps/01_レトロベア/レトロベア_02.png", "x": 900, "y": 230, "w": 220, "angle": 15},
+    {"type": "stamp", "src": "stamps/01_レトロベア/レトロベア_05.png", "x": 200, "y": 1680, "w": 260}
   ]
 }
