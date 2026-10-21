@@ -1,0 +1,118 @@
+{
+ "stamps": [
+  {
+   "category": "ドリンク",
+   "items": [
+    "stamps/01_ドリンク/coffee.svg",
+    "stamps/01_ドリンク/iced.svg"
+   ]
+  },
+  {
+   "category": "フード",
+   "items": [
+    "stamps/02_フード/cake.svg",
+    "stamps/02_フード/cookie.svg"
+   ]
+  },
+  {
+   "category": "デコ",
+   "items": [
+    "stamps/03_デコ/heart.svg",
+    "stamps/03_デコ/open.svg"
+   ]
+  }
+ ],
+ "templates": [
+  {
+   "category": "基本",
+   "items": [
+    {
+     "name": "写真＋ひとこと",
+     "background": "#FEF4E8",
+     "photo": {
+      "x": 90,
+      "y": 200,
+      "w": 900,
+      "h": 1100
+     },
+     "objects": [
+      {
+       "type": "text",
+       "text": "今日のひとこと",
+       "x": 540,
+       "y": 1450,
+       "font": "serif",
+       "fontSize": 96,
+       "fill": "#5D321A"
+      },
+      {
+       "type": "stamp",
+       "src": "stamps/03_デコ/heart.svg",
+       "x": 900,
+       "y": 230,
+       "w": 220,
+       "angle": 15
+      },
+      {
+       "type": "stamp",
+       "src": "stamps/01_ドリンク/coffee.svg",
+       "x": 200,
+       "y": 1680,
+       "w": 260
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "category": "お知らせ",
+   "items": [
+    {
+     "name": "新メニュー",
+     "background": "#4EA9A6",
+     "photo": {
+      "x": 0,
+      "y": 0,
+      "w": 1080,
+      "h": 1300
+     },
+     "objects": [
+      {
+       "type": "text",
+       "text": "NEW MENU",
+       "x": 540,
+       "y": 1450,
+       "font": "sans",
+       "fontSize": 120,
+       "fill": "#FEF4E8"
+      },
+      {
+       "type": "text",
+       "text": "ここにメニュー名",
+       "x": 540,
+       "y": 1620,
+       "font": "serif",
+       "fontSize": 84,
+       "fill": "#FEF4E8"
+      },
+      {
+       "type": "stamp",
+       "src": "stamps/03_デコ/open.svg",
+       "x": 900,
+       "y": 1250,
+       "w": 300,
+       "angle": -10
+      },
+      {
+       "type": "stamp",
+       "src": "stamps/02_フード/cake.svg",
+       "x": 200,
+       "y": 1760,
+       "w": 240
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
