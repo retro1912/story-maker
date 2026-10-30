@@ -1,4 +1,5 @@
 const W=1080,H=1920,$=s=>document.querySelector(s);
+window.addEventListener('error',e=>{const t=document.querySelector('#toast');if(t){t.textContent='エラー: '+e.message;t.hidden=false}});
 const FAM={sans:'Noto Sans JP',serif:'Noto Serif JP'};
 const COLORS=['#5D321A','#FEF4E8','#4EA9A6','#BFA00D','#ffffff','#000000'];
 const BLANK={name:'白紙（全面写真）',background:'#FEF4E8',objects:[]};
@@ -179,7 +180,7 @@ function photoPanel(box){
   box.append(el('p','h','写真'),r,el('p','h','背景色'),
     swRow(bgSrc?null:cv.backgroundColor,c=>{setBg(null);cv.backgroundColor=c;cv.requestRenderAll();draw()}),el('p','h','背景画像'));
   const cats=DATA.backgrounds||[];
-  if(!cats.length)return box.append(el('p','','backgrounds フォルダに画像を入れると、ここに表示されます。'));
+  if(!cats.length)return box.append(el('p','','backgrounds（または background）フォルダに画像を入れると、ここに表示されます。'));
   const i=Math.min(cat.bg,cats.length-1),tabs=el('div','row tight');
   cats.forEach((c,k)=>{const b=el('button','tab'+(k===i?' on':''),c.category);b.onclick=()=>{cat.bg=k;draw()};tabs.append(b)});
   const g=el('div','grid'),none=el('button','item txt'+(bgSrc?'':' on'),'なし');none.onclick=()=>setBg(null).then(draw);g.append(none);
@@ -230,7 +231,7 @@ async function discover(){
       if(r.ok){paths=(await r.json()).tree.filter(x=>x.type==='blob').map(x=>x.path);break}}
     if(!paths)throw 0;
     try{localStorage.setItem('tree',JSON.stringify({t:Date.now(),p:paths}))}catch{}}
-  const stamps=group(paths,IMG,'stamps'),backgrounds=group(paths,IMG,'backgrounds');
+  const stamps=group(paths,IMG,'stamps'),backgrounds=['backgrounds','background','背景'].flatMap(r=>group(paths,IMG,r));
   const templates=await Promise.all(group(paths,['.json',...IMG],'templates').map(async c=>({category:c.category,items:await tplItems(c.items)})));
   return{stamps,templates,backgrounds}}
 async function loadData(){

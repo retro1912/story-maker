@@ -11,7 +11,7 @@ function scan(root,exts){
   if(loose.length)cats.push({category:'その他',items:loose});
   return cats}
 const IMG=['.png','.svg','.webp','.jpg','.jpeg','.gif'];
-const stamps=scan('stamps',IMG),backgrounds=scan('backgrounds',IMG);
+const stamps=scan('stamps',IMG),backgrounds=['backgrounds','background','背景'].flatMap(r=>scan(r,IMG));
 const templates=scan('templates',['.json',...IMG]).map(c=>{
   const by=new Map(),items=[];
   c.items.forEach(f=>{const b=f.replace(/\.[^./]+$/,'');if(!by.has(b))by.set(b,{});by.get(b)[/\.json$/i.test(f)?'j':'i']=f});
