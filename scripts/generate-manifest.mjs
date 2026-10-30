@@ -11,7 +11,7 @@ function scan(root,exts){
   if(loose.length)cats.push({category:'その他',items:loose});
   return cats}
 const IMG=['.png','.svg','.webp','.jpg','.jpeg','.gif'];
-const stamps=scan('stamps',IMG);
+const stamps=scan('stamps',IMG),backgrounds=scan('backgrounds',IMG);
 const templates=scan('templates',['.json',...IMG]).map(c=>{
   const by=new Map(),items=[];
   c.items.forEach(f=>{const b=f.replace(/\.[^./]+$/,'');if(!by.has(b))by.set(b,{});by.get(b)[/\.json$/i.test(f)?'j':'i']=f});
@@ -19,6 +19,6 @@ const templates=scan('templates',['.json',...IMG]).map(c=>{
     if(v.j){try{t=JSON.parse(readFileSync(v.j,'utf8'))}catch(e){console.warn('JSONエラー:',v.j,e.message);if(!v.i)continue}}
     items.push({name:b.split('/').pop(),...t,frame:t.frame||v.i})}
   return{category:c.category,items}});
-writeFileSync('manifest.json',JSON.stringify({stamps,templates},null,1));
+writeFileSync('manifest.json',JSON.stringify({stamps,templates,backgrounds},null,1));
 const n=a=>a.reduce((s,c)=>s+c.items.length,0);
-console.log(`stamps: ${n(stamps)} / templates: ${n(templates)}`);
+console.log(`stamps: ${n(stamps)} / templates: ${n(templates)} / backgrounds: ${n(backgrounds)}`);

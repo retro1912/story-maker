@@ -2,11 +2,11 @@ const W=1080,H=1920,$=s=>document.querySelector(s);
 const FAM={sans:'Noto Sans JP',serif:'Noto Serif JP'};
 const COLORS=['#5D321A','#FEF4E8','#4EA9A6','#BFA00D','#ffffff','#000000'];
 const BLANK={name:'白紙（全面写真）',background:'#FEF4E8',objects:[]};
-let DATA={stamps:[],templates:[]},mode='stamp',cat={template:0,stamp:0},color=COLORS[0];
-let frame={x:0,y:0,w:W,h:H},photoObj=null,placeholder=null,frameObj=null,photoURL=null;
+let DATA={stamps:[],templates:[],backgrounds:[]},mode='stamp',cat={template:0,stamp:0,bg:0},color=COLORS[0];
+let frame={x:0,y:0,w:W,h:H},photoObj=null,placeholder=null,frameObj=null,photoURL=null,bgObj=null,bgSrc=null;
 
 fabric.Object.prototype.set({cornerSize:64,touchCornerSize:90,transparentCorners:false,cornerColor:'#4EA9A6',cornerStyle:'circle',borderColor:'#4EA9A6',borderScaleFactor:4,padding:8});
-const cv=new fabric.Canvas('c',{width:W,height:H,preserveObjectStacking:true,enableRetinaScaling:false,backgroundColor:'#FEF4E8'});
+const cv=new fabric.Canvas('c',{width:W,height:H,preserveObjectStacking:true,selection:false,enableRetinaScaling:false,backgroundColor:'#FEF4E8'});
 
 const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.textContent=h;return e};
 const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -35,14 +35,13 @@ im.onload=()=>{const k=Math.min(1,2200/Math.max(im.naturalWidth,im.naturalHeight
   img.set({left:frame.x+frame.w/2,top:frame.y+frame.h/2,originX:'center',originY:'center',scaleX:s,scaleY:s,lockRotation:true,
     clipPath:new fabric.Rect({left:frame.x,top:frame.y,width:frame.w,height:frame.h,absolutePositioned:true})});
   img.setControlsVisibility({mtr:false});
-  photoObj=img;cv.add(img);cv.sendToBack(img);cv.requestRenderAll()};im.src=url}
+  photoObj=img;cv.add(img);cv.sendToBack(img);fixBg();cv.requestRenderAll();updateBar()};im.src=url}
 function showPlaceholder(){
   const r=new fabric.Rect({width:frame.w,height:frame.h,fill:'rgba(78,169,166,.2)',stroke:'#4EA9A6',strokeWidth:6,strokeDashArray:[24,16]});
   const t=new fabric.Text('タップして写真を選ぶ',{fontSize:60,fill:'#5D321A',fontFamily:'Noto Sans JP',fontWeight:700,originX:'center',originY:'center',left:frame.w/2,top:frame.h/2});
   placeholder=new fabric.Group([r,t],{left:frame.x,top:frame.y,selectable:false,hoverCursor:'pointer'});
-  cv.add(placeholder);cv.sendToBack(placeholder)}
+  cv.add(placeholder);cv.sendToBack(placeholder);fixBg()}
 cv.on('mouse:up',e=>{if(placeholder&&e.target===placeholder)$('#file').click()});
-$('#pick').onclick=()=>$('#file').click();
 $('#file').onchange=e=>{const f=e.target.files[0];if(f){if(photoURL)URL.revokeObjectURL(photoURL);photoURL=URL.createObjectURL(f);setPhoto(photoURL)}e.target.value=''};
 
 /* スタンプ・文字 */
@@ -50,7 +49,7 @@ function addStamp(src,o={}){return new Promise(res=>fabric.Image.fromURL(encodeU
   if(!img){toast('スタンプを読み込めませんでした');return res()}
   const s=(o.w||360)/img.width;
   img.set({left:o.x??W/2,top:o.y??H/2,originX:'center',originY:'center',scaleX:s,scaleY:s,angle:o.angle||0});
-  cv.add(img);if(o.x==null)cv.setActiveObject(img);cv.requestRenderAll();res()}))}
+  cv.add(img);if(o.lock)setLock(img,true);if(o.x==null)cv.setActiveObject(img);cv.requestRenderAll();res()}))}
 const ts={stroke:null,sw:10};
 const setOutline=(t,col,w)=>t.set({stroke:col||null,strokeWidth:col?w:0});
 async function addText(text,font='sans',o={}){
@@ -60,20 +59,50 @@ async function addText(text,font='sans',o={}){
     left:o.x??W/2,top:o.y??H/2,originX:'center',originY:'center',textAlign:o.align||'center',lineHeight:1.2,angle:o.angle||0,
     paintFirst:'stroke',strokeLineJoin:'round'});
   setOutline(t,st.stroke,st.sw);
-  cv.add(t);if(mine)cv.setActiveObject(t);cv.requestRenderAll()}
+  cv.add(t);if(o.lock)setLock(t,true);if(mine)cv.setActiveObject(t);cv.requestRenderAll()}
 const selText=()=>{const a=cv.getActiveObject();return a&&a.type==='text'?a:null};
 function syncSel(){const a=selText();if(!a)return;color=a.fill;ts.stroke=a.strokeWidth?a.stroke:null;if(a.strokeWidth)ts.sw=a.strokeWidth;if(mode==='text')draw()}
 cv.on('selection:created',syncSel);cv.on('selection:updated',syncSel);
 const addObj=o=>o.type==='stamp'?addStamp(o.src,o):o.type==='text'?addText(o.text,o.font,o):0;
 
-$('#del').onclick=()=>{const a=cv.getActiveObjects();if(!a.length)return toast('削除するものを選んでください');
-  cv.discardActiveObject();
-  a.forEach(o=>{cv.remove(o);if(o===photoObj){photoObj=null;photoURL=null;showPlaceholder()}});cv.requestRenderAll()};
-
-/* 中央に配置 */
-function center(fn){const a=cv.getActiveObject();if(!a||a===photoObj)return toast('中央に置く文字かスタンプを選んでください');
-  cv[fn](a);a.setCoords();cv.requestRenderAll()}
-$('#cx').onclick=()=>center('centerObjectH');$('#cy').onclick=()=>center('centerObjectV');
+/* ロック・削除・位置・写真の拡大縮小・背景 */
+const fixBg=()=>{if(bgObj)cv.sendToBack(bgObj)};
+function setLock(o,on){o.locked=on;
+  o.set({lockMovementX:on,lockMovementY:on,lockScalingX:on,lockScalingY:on,lockRotation:on||o===photoObj,hasControls:!on,
+    borderColor:on?'#BFA00D':'#4EA9A6',borderDashArray:on?[14,10]:null});o.setCoords()}
+function updateBar(){const a=cv.getActiveObject(),any=cv.getObjects().some(o=>o.locked),l=$('#lock');
+  ['#cx','#cy','#del'].forEach(q=>$(q).disabled=!a);
+  l.disabled=!a&&!any;l.textContent=a?(a.locked?'ロック解除':'ロック'):(any?'全ロック解除':'ロック');l.classList.toggle('gold',!!(a&&a.locked))}
+['selection:created','selection:updated','selection:cleared'].forEach(e=>cv.on(e,updateBar));
+const _find=cv._searchPossibleTargets.bind(cv); // ロック中の素材は、下にある素材を優先して選ぶ（下に何もなければ選べる）
+cv._searchPossibleTargets=(objs,p)=>_find(objs.filter(o=>!o.locked),p)||_find(objs,p);
+let lastTap=0;cv.on('mouse:down',e=>{const n=Date.now(); // すばやく2回タップで、ロック中の素材を選ぶ
+  if(n-lastTap<350){const p=cv.getPointer(e.e),o=cv.getObjects().slice().reverse().find(o=>o.locked&&o.containsPoint(p));
+    if(o){cv.setActiveObject(o);cv.requestRenderAll()}}lastTap=n});
+$('#lock').onclick=async()=>{const a=cv.getActiveObject();
+  if(!a){if(await ask({title:'ロックをすべて解除',msg:'ロック中の素材をすべて解除します。',ok:'解除する'})){cv.getObjects().forEach(o=>o.locked&&setLock(o,false));cv.requestRenderAll();updateBar()}return}
+  setLock(a,!a.locked);cv.requestRenderAll();updateBar();
+  toast(a.locked?'ロックしました（選び直すには、すばやく2回タップ）':'ロックを解除しました')};
+$('#del').onclick=()=>{const a=cv.getActiveObject();if(!a)return;if(a.locked)return toast('ロック中です。先に解除してください');
+  cv.discardActiveObject();cv.remove(a);
+  if(a===photoObj){photoObj=null;photoURL=null;showPlaceholder();fixBg()}cv.requestRenderAll();updateBar()};
+function center(axis){const a=cv.getActiveObject();if(!a)return;if(a.locked)return toast('ロック中です。先に解除してください');
+  if(a===photoObj){const p=a.getCenterPoint();
+    a.setPositionByOrigin(new fabric.Point(axis==='x'?frame.x+frame.w/2:p.x,axis==='y'?frame.y+frame.h/2:p.y),'center','center')}
+  else cv[axis==='x'?'centerObjectH':'centerObjectV'](a);
+  a.setCoords();cv.requestRenderAll()}
+$('#cx').onclick=()=>center('x');$('#cy').onclick=()=>center('y');
+function fitPhoto(m){const p=photoObj;if(!p)return toast('先に写真を選んでください');if(p.locked)return toast('写真がロック中です。先に解除してください');
+  const s=m==='w'?frame.w/p.width:frame.h/p.height;
+  p.set({scaleX:s,scaleY:s,left:frame.x+frame.w/2,top:frame.y+frame.h/2});p.setCoords();cv.requestRenderAll()}
+async function setBg(src){
+  if(bgObj){cv.remove(bgObj);bgObj=null}bgSrc=null;
+  if(src){try{const im=await loadImg(src),nw=im.naturalWidth||W,nh=im.naturalHeight||H,k=Math.min(1,2200/Math.max(nw,nh)),c=document.createElement('canvas');
+    c.width=Math.round(nw*k);c.height=Math.round(nh*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+    const s=Math.max(W/c.width,H/c.height);
+    bgObj=new fabric.Image(c,{left:W/2,top:H/2,originX:'center',originY:'center',scaleX:s,scaleY:s,selectable:false,evented:false});
+    cv.add(bgObj);cv.sendToBack(bgObj);bgSrc=src}catch{toast('背景画像を読み込めませんでした')}}
+  cv.requestRenderAll()}
 
 /* テンプレート */
 const loadImg=src=>new Promise((ok,ng)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=ng;i.src=encodeURI(src)});
@@ -93,14 +122,14 @@ function holeBox(im){ // フレーム画像の最も大きい透明部分を探�
   return{x:X,y:Y,w:Math.min(W,(best.x1+1)*k+m)-X,h:Math.min(H,(best.y1+1)*k+m)-Y}}
 async function applyTemplate(t){
   cv.clear();cv.backgroundColor=t.background||'#FEF4E8';
-  photoObj=placeholder=frameObj=null;frame=t.photo||{x:0,y:0,w:W,h:H};
+  photoObj=placeholder=frameObj=bgObj=null;bgSrc=null;frame=t.photo||{x:0,y:0,w:W,h:H};
   if(t.frame){try{const im=await loadImg(t.frame);
       if(!t.photo){const b=holeBox(im);if(b)frame=b;else toast('フレーム画像に透明な部分（写真が入る穴）がありません')}
       frameObj=new fabric.Image(im,{left:0,top:0,scaleX:W/im.width,scaleY:H/im.height,selectable:false,evented:false});cv.add(frameObj)}
     catch{toast('フレーム画像を読み込めませんでした')}}
   showPlaceholder();if(photoURL)setPhoto(photoURL);
   for(const o of t.objects||[])await addObj(o);
-  cv.discardActiveObject();cv.requestRenderAll()}
+  cv.discardActiveObject();cv.requestRenderAll();updateBar()}
 function preview(t){const f=t.photo||{x:0,y:0,w:W,h:H};
   const o=(t.objects||[]).map(o=>o.type==='stamp'
     ?`<image href="${encodeURI(o.src)}" x="${o.x-o.w/2}" y="${o.y-o.w/2}" width="${o.w}" height="${o.w}"/>`
@@ -112,6 +141,7 @@ function draw(){
   document.querySelectorAll('.mode').forEach(b=>b.classList.toggle('on',b.dataset.m===mode));
   const box=$('#items'),tabs=$('#tabs');box.innerHTML=tabs.innerHTML='';
   if(mode==='text')return textPanel(box,tabs.hidden=true);
+  if(mode==='photo')return photoPanel(box,tabs.hidden=true);
   tabs.hidden=false;
   const cats=mode==='stamp'?DATA.stamps:DATA.templates,i=Math.min(cat[mode],cats.length-1);
   if(!cats.length)return box.append(el('p','',mode==='stamp'?'stamps フォルダに画像を入れるとここに表示されます。':'templates フォルダにJSONを入れるとここに表示されます。'));
@@ -121,7 +151,7 @@ function draw(){
     const b=el('button','item');
     if(mode==='stamp'){const im=el('img');im.src=encodeURI(it);im.alt='スタンプ';im.loading='lazy';im.onerror=()=>b.remove();b.append(im);b.onclick=()=>addStamp(it)}
     else{b.innerHTML=preview(it)+`<span>${esc(it.name||'')}</span>`;
-      b.onclick=async()=>{if(cv.getObjects().some(o=>o!==photoObj&&o!==placeholder&&o!==frameObj)&&!await ask({title:'テンプレートを適用',msg:'現在の編集内容は消えます。よろしいですか？',ok:'適用する'}))return;applyTemplate(it)}}
+      b.onclick=async()=>{if(cv.getObjects().some(o=>o!==photoObj&&o!==placeholder&&o!==frameObj&&o!==bgObj)&&!await ask({title:'テンプレートを適用',msg:'現在の編集内容は消えます。よろしいですか？',ok:'適用する'}))return;applyTemplate(it)}}
     g.append(b)});
   box.append(g)}
 function swRow(cur,pick,none){const r=el('div','row'),lc=String(cur).toLowerCase();
@@ -143,6 +173,19 @@ function textPanel(box){
     swRow(color,c=>{color=c;const a=selText();if(a){a.set('fill',c);cv.requestRenderAll()}draw()}),
     el('p','h','縁取り（色・太さ）'),
     swRow(ts.stroke,c=>{ts.stroke=c;const a=selText();if(a){setOutline(a,c,ts.sw);cv.requestRenderAll()}draw()},1),rg)}
+function photoPanel(box){
+  const r=el('div','row tight'),pk=el('button','','写真を選ぶ'),fw=el('button','sub','幅に合わせる'),fh=el('button','sub','高さに合わせる');
+  pk.onclick=()=>$('#file').click();fw.onclick=()=>fitPhoto('w');fh.onclick=()=>fitPhoto('h');r.append(pk,fw,fh);
+  box.append(el('p','h','写真'),r,el('p','h','背景色'),
+    swRow(bgSrc?null:cv.backgroundColor,c=>{setBg(null);cv.backgroundColor=c;cv.requestRenderAll();draw()}),el('p','h','背景画像'));
+  const cats=DATA.backgrounds||[];
+  if(!cats.length)return box.append(el('p','','backgrounds フォルダに画像を入れると、ここに表示されます。'));
+  const i=Math.min(cat.bg,cats.length-1),tabs=el('div','row tight');
+  cats.forEach((c,k)=>{const b=el('button','tab'+(k===i?' on':''),c.category);b.onclick=()=>{cat.bg=k;draw()};tabs.append(b)});
+  const g=el('div','grid'),none=el('button','item txt'+(bgSrc?'':' on'),'なし');none.onclick=()=>setBg(null).then(draw);g.append(none);
+  cats[i].items.forEach(it=>{const b=el('button','item bg'+(bgSrc===it?' on':'')),im=el('img');
+    im.src=encodeURI(it);im.alt='背景';im.loading='lazy';im.onerror=()=>b.remove();b.append(im);b.onclick=()=>setBg(it).then(draw);g.append(b)});
+  box.append(tabs,g)}
 document.querySelectorAll('.mode').forEach(b=>b.onclick=()=>{mode=b.dataset.m;draw()});
 
 /* 書き出し */
@@ -187,13 +230,13 @@ async function discover(){
       if(r.ok){paths=(await r.json()).tree.filter(x=>x.type==='blob').map(x=>x.path);break}}
     if(!paths)throw 0;
     try{localStorage.setItem('tree',JSON.stringify({t:Date.now(),p:paths}))}catch{}}
-  const stamps=group(paths,IMG,'stamps');
+  const stamps=group(paths,IMG,'stamps'),backgrounds=group(paths,IMG,'backgrounds');
   const templates=await Promise.all(group(paths,['.json',...IMG],'templates').map(async c=>({category:c.category,items:await tplItems(c.items)})));
-  return{stamps,templates}}
+  return{stamps,templates,backgrounds}}
 async function loadData(){
   let d;try{d=await discover()}catch{}
   if(!d){try{d=await (await fetch('manifest.json',{cache:'no-cache'})).json()}catch{toast('スタンプ・テンプレートの一覧を読み込めません')}}
-  DATA=d||{stamps:[],templates:[]};
+  DATA=d||{stamps:[],templates:[]};DATA.backgrounds=DATA.backgrounds||[];
   DATA.templates=[{category:'基本',items:[BLANK]},...DATA.templates.filter(c=>c.items.length)];
   cat={template:0,stamp:0}}
 

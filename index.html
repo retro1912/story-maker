@@ -13,18 +13,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@500;700&family=Noto+Serif+JP:wght@700&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css"></head>
 <body>
-<header><h1>Stories Maker</h1></header>
+<header><h1>Stories Maker</h1><button class="sub" id="reset">初期化</button><button class="gold" id="share">共有</button><button class="dark" id="save">保存</button></header>
 <main>
  <div id="work">
   <div id="stage"><canvas id="c"></canvas></div>
-  <div id="bar2"><button class="sub" id="cx">左右中央</button><button class="sub" id="cy">上下中央</button></div>
-  <div id="bar">
-   <button class="sub" id="pick">写真を選ぶ</button><button class="sub" id="del">削除</button><button class="sub" id="reset">初期化</button><span></span>
-   <button class="gold" id="share">共有</button><button id="save">保存</button>
-  </div>
+  <div id="ctx"><button class="sub" id="cx" disabled>左右中央</button><button class="sub" id="cy" disabled>上下中央</button><button class="sub" id="lock" disabled>ロック</button><button class="sub" id="del" disabled>削除</button></div>
  </div>
  <section id="panel">
-  <nav id="modes"><button class="mode" data-m="stamp">スタンプ</button><button class="mode" data-m="text">文字</button><button class="mode" data-m="template">テンプレート</button></nav>
+  <nav id="modes"><button class="mode" data-m="stamp">スタンプ</button><button class="mode" data-m="text">文字</button><button class="mode" data-m="photo">写真・背景</button><button class="mode" data-m="template">テンプレート</button></nav>
   <nav id="tabs"></nav>
   <div id="items"></div>
  </section>
