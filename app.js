@@ -144,7 +144,7 @@ function draw(){
   if(mode==='text')return textPanel(box,tabs.hidden=true);
   if(mode==='photo')return photoPanel(box,tabs.hidden=true);
   tabs.hidden=false;
-  const cats=mode==='stamp'?DATA.stamps:DATA.templates,i=Math.min(cat[mode],cats.length-1);
+  const cats=mode==='stamp'?DATA.stamps:DATA.templates,i=Math.max(0,Math.min(cat[mode]||0,cats.length-1));
   if(!cats.length)return box.append(el('p','',mode==='stamp'?'stamps フォルダに画像を入れるとここに表示されます。':'templates フォルダにJSONを入れるとここに表示されます。'));
   cats.forEach((c,k)=>{const b=el('button','tab'+(k===i?' on':''),c.category);b.onclick=()=>{cat[mode]=k;draw()};tabs.append(b)});
   const g=el('div','grid');
@@ -181,7 +181,7 @@ function photoPanel(box){
     swRow(bgSrc?null:cv.backgroundColor,c=>{setBg(null);cv.backgroundColor=c;cv.requestRenderAll();draw()}),el('p','h','背景画像'));
   const cats=DATA.backgrounds||[];
   if(!cats.length)return box.append(el('p','','backgrounds（または background）フォルダに画像を入れると、ここに表示されます。'));
-  const i=Math.min(cat.bg,cats.length-1),tabs=el('div','row tight');
+  const i=Math.max(0,Math.min(cat.bg||0,cats.length-1)),tabs=el('div','row tight');
   cats.forEach((c,k)=>{const b=el('button','tab'+(k===i?' on':''),c.category);b.onclick=()=>{cat.bg=k;draw()};tabs.append(b)});
   const g=el('div','grid'),none=el('button','item txt'+(bgSrc?'':' on'),'なし');none.onclick=()=>setBg(null).then(draw);g.append(none);
   cats[i].items.forEach(it=>{const b=el('button','item bg'+(bgSrc===it?' on':'')),im=el('img');
@@ -239,7 +239,7 @@ async function loadData(){
   if(!d){try{d=await (await fetch('manifest.json',{cache:'no-cache'})).json()}catch{toast('スタンプ・テンプレートの一覧を読み込めません')}}
   DATA=d||{stamps:[],templates:[]};DATA.backgrounds=DATA.backgrounds||[];
   DATA.templates=[{category:'基本',items:[BLANK]},...DATA.templates.filter(c=>c.items.length)];
-  cat={template:0,stamp:0}}
+  cat={template:0,stamp:0,bg:0}}
 
 /* 初期化 */
 $('#reset').onclick=async()=>{
